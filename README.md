@@ -1,16 +1,16 @@
 # Busca Inteligente Labs
 
-Projetos práticos de Recuperação de Informação e Processamento de Linguagem Natural desenvolvidos na disciplina **Tendências em Ciência da Computação**.
+Três motores de busca em Python, do mais simples ao mais sofisticado: busca léxica com TF-IDF implementado do zero, busca híbrida que combina BM25 com embeddings, e triagem semântica de textos. Projetos da disciplina **Tendências em Ciência da Computação**.
 
-O repositório está organizado por branch para que cada desafio possa ser estudado, executado e versionado de maneira independente.
+> **O código de cada projeto fica na branch dele.** Esta branch `main` tem só a visão geral. Use os links da tabela para abrir cada projeto.
 
 ## Projetos
 
 | Branch | Projeto | Principais conceitos |
 | --- | --- | --- |
-| `agrosearch` | Motor de busca para manuais agrícolas | Pré-processamento, índice invertido, TF-IDF e similaridade de cosseno |
-| `healthsearch` | Motor de busca híbrido para protocolos médicos | BM25, embeddings, similaridade de cosseno, RRF e Cross-Encoder |
-| `ouvidoria-inteligente` | Triagem semântica de manifestações cidadãs | Embeddings, duplicatas, PCA/t-SNE e chunking |
+| [`agrosearch`](https://github.com/JorgeBublitz/busca-inteligente-labs/tree/agrosearch) | Motor de busca para manuais agrícolas em PDF | Pré-processamento, stemming, índice invertido, TF-IDF e similaridade de cosseno implementados sem bibliotecas de busca |
+| [`healthsearch`](https://github.com/JorgeBublitz/busca-inteligente-labs/tree/healthsearch) | Motor de busca híbrido para protocolos médicos | BM25, embeddings multilíngues, Reciprocal Rank Fusion (RRF) e reordenação com Cross-Encoder |
+| [`ouvidoria-inteligente`](https://github.com/JorgeBublitz/busca-inteligente-labs/tree/ouvidoria-inteligente) | Triagem semântica de manifestações de cidadãos | Busca semântica, comparação BoW × TF-IDF × embeddings, detecção de duplicatas, PCA/t-SNE e chunking |
 
 ## Como usar
 
