@@ -17,17 +17,30 @@ st.set_page_config(page_title="Ouvidoria Inteligente", page_icon="📬", layout=
 ARQUIVO_DADOS = Path(__file__).with_name("manifestacoes.json")
 MODELOS = {
     "Multilíngue MiniLM": "paraphrase-multilingual-MiniLM-L12-v2",
-    "BGE Português": "BAAI/bge-small-pt-v1.5",
+    "BGE Multilíngue": "BAAI/bge-m3",
 }
+# M004 x M036 (não M004 x M025): ambas tratam da mesma praça central com iluminação apagada
+# no trecho entre o ponto de ônibus e a via, gerando insegurança para quem passa à noite.
+# M025 fala de um ponto de ônibus em outra rua (Rua Verde) e não é o mesmo caso.
 DUPLICATAS_REAIS = {
     frozenset(("M001", "M003")), frozenset(("M003", "M017")), frozenset(("M003", "M034")),
-    frozenset(("M008", "M022")), frozenset(("M008", "M035")), frozenset(("M004", "M025")),
+    frozenset(("M008", "M022")), frozenset(("M008", "M035")), frozenset(("M004", "M036")),
 }
 
 
 @st.cache_data
 def carregar_dados():
-    return pd.DataFrame(json.loads(ARQUIVO_DADOS.read_text(encoding="utf-8")))
+    try:
+        registros = json.loads(ARQUIVO_DADOS.read_text(encoding="utf-8"))
+        dados = pd.DataFrame(registros)
+        colunas_obrigatorias = {"id", "texto", "categoria_oficial"}
+        faltantes = colunas_obrigatorias - set(dados.columns)
+        if faltantes:
+            raise ValueError(f"Campos obrigatórios ausentes no JSON: {', '.join(sorted(faltantes))}")
+        return dados
+    except (json.JSONDecodeError, ValueError, KeyError) as erro:
+        st.error(f"Não foi possível carregar '{ARQUIVO_DADOS.name}': {erro}")
+        st.stop()
 
 
 @st.cache_resource(show_spinner="Carregando modelo de embeddings...")
@@ -52,13 +65,12 @@ def chunks_de_texto(texto, tamanho, sobreposicao):
     return splitter.split_text(texto)
 
 
-def detectar_duplicatas(textos, ids, limiar=0.85, nome_modelo="Multilíngue MiniLM"):
+def detectar_duplicatas(ids, vetores, limiar=0.85):
     """Retorna matriz e pares semanticamente duplicados acima do limiar."""
-    vetores = gerar_embeddings(tuple(textos), nome_modelo)
     matriz = cosine_similarity(vetores)
     pares = []
-    for i in range(len(textos)):
-        for j in range(i + 1, len(textos)):
+    for i in range(len(ids)):
+        for j in range(i + 1, len(ids)):
             if matriz[i, j] >= limiar:
                 pares.append({"origem": ids[i], "destino": ids[j], "similaridade": matriz[i, j]})
     return matriz, pares
@@ -106,12 +118,15 @@ with tab_base:
 
 with tab_espaco:
     metodo = st.radio("Redução de dimensionalidade", ["PCA", "t-SNE"], horizontal=True)
-    coordenadas = reduzir_2d(embeddings, metodo)
-    visual = dados[["id", "categoria_oficial", "texto"]].copy()
-    visual["x"], visual["y"] = coordenadas[:, 0], coordenadas[:, 1]
-    figura = px.scatter(visual, x="x", y="y", color="categoria_oficial", hover_data=["id", "texto"], title=f"Espaço semântico em 2D — {metodo}")
-    st.plotly_chart(figura, width="stretch")
-    st.caption("Compare visualmente os agrupamentos semânticos com as categorias oficiais do conjunto de dados.")
+    if metodo == "t-SNE" and len(dados) <= 3:
+        st.warning("São necessários mais de 3 registros para calcular o t-SNE. Use PCA ou adicione mais dados.")
+    else:
+        coordenadas = reduzir_2d(embeddings, metodo)
+        visual = dados[["id", "categoria_oficial", "texto"]].copy()
+        visual["x"], visual["y"] = coordenadas[:, 0], coordenadas[:, 1]
+        figura = px.scatter(visual, x="x", y="y", color="categoria_oficial", hover_data=["id", "texto"], title=f"Espaço semântico em 2D — {metodo}")
+        st.plotly_chart(figura, width="stretch")
+        st.caption("Compare visualmente os agrupamentos semânticos com as categorias oficiais do conjunto de dados.")
 
 with tab_chunking:
     exemplo_longo = dados.assign(_tamanho=dados["texto"].str.len()).sort_values("_tamanho", ascending=False).iloc[0]["texto"]
@@ -129,8 +144,14 @@ with tab_chunking:
         st.plotly_chart(figura, width="stretch")
 
 with tab_analise:
+    # Este bloco espelha intencionalmente a análise feita em analise_comparativa.ipynb e
+    # deteccao_duplicatas.ipynb: os notebooks reproduzem os mesmos cálculos de forma
+    # standalone (sem depender do app) para fins didáticos, o que gera duplicação
+    # aceitável neste repositório de aprendizado.
     st.subheader("Comparação BoW, TF-IDF e Embeddings")
-    pares = [("M003", "M017"), ("M008", "M022"), ("M008", "M031")]
+    # M003 x M034 é um par genuinamente semelhante: M034 cita explicitamente "o buraco
+    # da Avenida Brasil" (a manifestação M003), então ambos descrevem o mesmo problema.
+    pares = [("M003", "M017"), ("M008", "M022"), ("M003", "M034")]
     textos = dados["texto"].tolist()
     bow = CountVectorizer().fit_transform(textos)
     tfidf = TfidfVectorizer().fit_transform(textos)
@@ -147,7 +168,7 @@ with tab_analise:
     st.dataframe(pd.DataFrame(linhas), width="stretch", hide_index=True, column_config={campo: st.column_config.NumberColumn(format="%.3f") for campo in ["BoW", "TF-IDF", "Embeddings"]})
 
     st.subheader("Detecção de duplicatas")
-    matriz, pares_duplicados = detectar_duplicatas(dados["texto"].tolist(), dados["id"].tolist(), limiar, nome_modelo)
+    matriz, pares_duplicados = detectar_duplicatas(dados["id"].tolist(), embeddings, limiar)
     st.write(f"Pares encontrados com similaridade ≥ {limiar:.2f}: **{len(pares_duplicados)}**")
     st.dataframe(pd.DataFrame(pares_duplicados), width="stretch", hide_index=True, column_config={"similaridade": st.column_config.NumberColumn(format="%.3f")})
     pares_detectados = {frozenset((item["origem"], item["destino"])) for item in pares_duplicados}
